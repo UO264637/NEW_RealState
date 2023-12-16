@@ -72,10 +72,14 @@ function App() {
     } catch (error) { console.log(error) }
   }
 
-  let clickBuyTiket = async (i) => {
-    if (walletBalance > 0.02) {
-      const tx = await myContract.current.buyTiket(11, {
-        value: ethers.utils.parseEther("0.02"),
+  let clickBuyTiket = async (e, i) => {
+    e.preventDefault();
+    const inputValue = e.target.elements[0].value;
+    console.log(inputValue);
+
+    if (walletBalance > inputValue) {
+      const tx = await myContract.current.buyTiket(i, {
+        value: ethers.utils.parseEther(inputValue),
         gasLimit: 6721975,
         gasPrice: 20000000000,
       })
@@ -117,7 +121,7 @@ function App() {
     const inputValue = e.target.elements[0].value;
     if (utils.isAddress(inputValue)) {
       await myContract.current.setAdmin(inputValue).then(
-        (result) => { alert("Admin updated")},
+        (result) => { alert("Admin updated") },
         (error) => { alert(decodeError(error).error) }
       );
     }
@@ -126,32 +130,81 @@ function App() {
     }
   };
 
+  let clickTransferTicket = async (e) => {
+    e.preventDefault();
+
+    const inputTicket = e.target.elements[0].value;
+    const inputAddress = e.target.elements[1].value;
+
+    if (utils.isAddress(inputAddress)) {
+      const tx = await myContract.current.transferTicket(inputTicket, inputAddress).then(
+        async (result) => { alert("Ticket transferred");
+        const tiketsUpdated = await myContract.current.getTikets();
+        setTikets(tiketsUpdated);
+      },
+        (error) => { alert(decodeError(error).error) }
+      );
+    }
+    else {
+      alert("Address not valid")
+    }
+  }
+
+
   return (
     <div>
       <h1>Tikets store</h1>
       <p>
-        <label>Balance: </label> {balance}<br></br>
-        <label>Balance Wei: </label> {balanceWei}
-        <button onClick={() => withdrawBalance()}>Withdraw Balance</button>
+        Balance: {balance} BNB<br></br>
+        Balance Wei: {balanceWei} BNB
+        <button style={{ marginLeft: '10px' }} onClick={() => withdrawBalance()}>Withdraw Balance</button>
       </p>
       <form className="form-inline" onSubmit={(e) => changeAdmin(e)}>
         <label>New Admin: </label>
-        <input type="text" />
+        <input style={{ marginLeft: '10px' }} type="text" />
         <button type="submit" > Change </button>
       </form>
-
+      <br></br>
       <p>
-        <label>Wallet Balance: </label> {walletBalance}<br></br>
+        Wallet Balance: {walletBalance} BNB<br></br>
       </p>
-
       <ul>
         {tikets.map((address, i) =>
-          <li>Tiket {i} comprado por {address}
-            {address == ethers.constants.AddressZero &&
-              <a href="#" onClick={() => clickBuyTiket(i)}> buy</a>}
+          <li key={i} style={{ display: 'flex' }}>
+            <span>
+              Tiket {i} comprado por {address}
+            </span>
+            {address === ethers.constants.AddressZero && (
+              <form className="form-inline" onSubmit={(e) => clickBuyTiket(e, i)}>
+                <input
+                  type="number"
+                  defaultValue={0.01}
+                  min={0.01}
+                  step={0.01}
+                  style={{ width: '50px', marginLeft: '10px' }}
+                />
+                <label> BNB</label>
+                <button type="submit" style={{ marginLeft: '10px' }}> Buy </button>
+              </form>
+            )}
           </li>
         )}
       </ul>
+      <br></br>
+      <form className="form-inline" onSubmit={(e) => clickTransferTicket(e)}>
+        <label>Transfer ticket number: </label>
+        <input
+          type="number"
+          defaultValue={0}
+          min={0}
+          step={1}
+          max={15}
+          style={{ width: '40px', marginLeft: '10px', marginRight: '10px' }}
+        />
+        <label> To address: </label>
+        <input style={{ marginLeft: '10px' }} type="text" />
+        <button type="submit" > Transfer </button>
+      </form>
     </div>
   )
 }
