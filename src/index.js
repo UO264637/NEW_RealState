@@ -13,6 +13,8 @@ function App() {
   const [doubleInterestBalance, setDoubleInterestBalance] = useState();
   const [doubleInterest, setDoubleInterest] = useState();
   const [amount, setAmount] = useState(1);
+  const [contractBalance, setContractBalance] = useState();
+  const [bnbFromSales, setBNBFromSales] = useState();
 
   useEffect(() => {
     initContracts();
@@ -56,6 +58,22 @@ function App() {
     }
     else
       setDoubleInterest(0)
+
+    let contractBalanceFromBlockchain = await bank.current?.getBalance();
+    if (contractBalanceFromBlockchain != null) {
+      let b = ethers.utils.formatEther(contractBalanceFromBlockchain);
+      setContractBalance(b)
+    }
+    else
+      setContractBalance(0)
+
+    let bnbFromSalesFromBlockchain = await bank.current?.getBNBFromSales();
+    if (bnbFromSalesFromBlockchain != null) {
+      let b = ethers.utils.formatEther(bnbFromSalesFromBlockchain);
+      setBNBFromSales(b)
+    }
+    else
+      setBNBFromSales(0)
   }
 
   const updateAmount = (e) => {
@@ -124,7 +142,14 @@ function App() {
       gasPrice: 20000000000,
     });
 
-    await tx.wait();
+    try {
+      await tx.wait()
+      updateBank();
+    } catch (error) {
+      alert('Error, no previous deposit');
+    }
+
+    updateBank();
 
     updateBank();
   }
@@ -147,8 +172,20 @@ function App() {
     updateBank();
   }
 
-  const clickBuyBMIW = (e) => {
+  const clickBuyBMIW = async (e) => {
     e.preventDefault();
+
+    const inputValue = e.target.elements[0].value;
+
+    const tx = await bank.current.buyBMIW(inputValue, {
+      value: ethers.utils.parseEther((inputValue*0.001).toString()),
+      gasLimit: 6721975,
+      gasPrice: 20000000000,
+    });
+
+    await tx.wait();
+
+    updateBank();
   };
 
   return (
@@ -187,6 +224,9 @@ function App() {
         />
         <button type="submit">Buy for {amount * 0.001} BNB</button>
       </form>
+      <br></br><br></br>
+      <p>Contrct Balance: {contractBalance} BNB</p>
+      <p>BNB from Sales: {bnbFromSales} BNB</p>
     </div>
   )
 }
