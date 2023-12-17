@@ -2,217 +2,196 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import detectEthereumProvider from "@metamask/detect-provider";
-import { Contract, ethers, utils } from "ethers";
-import myContractManifest from "./contracts/MyContract.json";
+import { Contract, ethers } from "ethers";
 import { useState, useEffect, useRef } from 'react';
-import { decodeError } from 'ethers-decode-error';
+import bankManifest from "./contracts/Bank.json";
 
 function App() {
-  const myContract = useRef(null);
-  const [tikets, setTikets] = useState([]);
+  const bank = useRef(null);
   const [balance, setBalance] = useState();
-  const [balanceWei, setBalanceWei] = useState();
-  const [walletBalance, setWalletBalance] = useState();
+  const [interest, setInterest] = useState();
+  const [doubleInterestBalance, setDoubleInterestBalance] = useState();
+  const [doubleInterest, setDoubleInterest] = useState();
+  const [amount, setAmount] = useState(1);
 
   useEffect(() => {
     initContracts();
   }, [])
 
   let initContracts = async () => {
-    await configureBlockchain();
-    let tiketsFromBlockchain = await myContract.current?.getTikets();
-    if (tiketsFromBlockchain != null)
-      setTikets(tiketsFromBlockchain)
+    await getBlockchain();
 
-    updateBalances();
+    updateBank();
   }
 
-  let updateBalances = async () => {
-    let balanceFromBlockchain = await myContract.current?.getBalance();
+  let updateBank = async () => {
+    let balanceFromBlockchain = await bank.current?.getClientBalanceBNB();
     if (balanceFromBlockchain != null) {
-      let bal = ethers.utils.formatEther(balanceFromBlockchain);
-      setBalance(bal);
+      let b = ethers.utils.formatEther(balanceFromBlockchain);
+      setBalance(b)
     }
     else
-      setBalance(0);
+      setBalance(0)
 
-    let balanceWeiFromBlockchain = await myContract.current?.getBalanceWei();
-    if (balanceWeiFromBlockchain != null) {
-      let balWei = ethers.utils.formatEther(balanceWeiFromBlockchain);
-      setBalanceWei(balWei);
+    let interestFromBlockchain = await bank.current?.getClientBalanceBMIW();
+    if (interestFromBlockchain != null) {
+      let b = ethers.utils.formatEther(interestFromBlockchain);
+      setInterest(b)
     }
     else
-      setBalanceWei(0);
+      setInterest(0)
+
+    let diBalanceFromBlockchain = await bank.current?.getClientBalanceBNBDoubleInterest();
+    if (diBalanceFromBlockchain != null) {
+      let b = ethers.utils.formatEther(diBalanceFromBlockchain);
+      setDoubleInterestBalance(b)
+    }
+    else
+      setDoubleInterestBalance(0)
+
+    let doubleInterestFromBlockchain = await bank.current?.getClientBalanceBMIWDoubleInterest();
+    if (doubleInterestFromBlockchain != null) {
+      let b = ethers.utils.formatEther(doubleInterestFromBlockchain);
+      setDoubleInterest(b)
+    }
+    else
+      setDoubleInterest(0)
   }
 
-  let updateWallet = async () => {
-    let userAddress = await myContract.current.signer.getAddress();
-    let wb = await myContract.current.provider.getBalance(userAddress);
-    setWalletBalance(ethers.utils.formatEther(wb));
-  }
-
-  let configureBlockchain = async () => {
-    try {
-      let provider = await detectEthereumProvider();
-      if (provider) {
-        await provider.request({ method: 'eth_requestAccounts' });
-        const networkId = await provider.request({ method: 'net_version' })
-
-        provider = new ethers.providers.Web3Provider(provider);
-        const signer = provider.getSigner();
-
-        myContract.current = new Contract(
-          myContractManifest.networks[networkId].address,
-          myContractManifest.abi,
-          signer,
-          provider
-        );
-        updateWallet();
-      }
-    } catch (error) { console.log(error) }
-  }
-
-  let clickBuyTiket = async (e, i) => {
-    e.preventDefault();
-    const inputValue = e.target.elements[0].value;
-    console.log(inputValue);
-
-    if (walletBalance > inputValue) {
-      const tx = await myContract.current.buyTiket(i, {
-        value: ethers.utils.parseEther(inputValue),
-        gasLimit: 6721975,
-        gasPrice: 20000000000,
-      })
-
-      try {
-        await tx.wait()
-        const tiketsUpdated = await myContract.current.getTikets();
-        setTikets(tiketsUpdated);
-        updateBalances();
-        updateWallet();
-      } catch (error) {
-        const errorDecoded = decodeError(error);
-        alert('Revert reason: ' + errorDecoded.error);
-      }
-    }
-    else {
-      alert("Not enough BNB")
-    }
-  }
-
-  let withdrawBalance = async () => {
-    const tx = await myContract.current.transferBalanceToAdmin().then(
-      (result) => { },
-      (error) => { alert(decodeError(error).error) }
-    );
-    try {
-      await tx.wait();
-
-      updateBalances();
-      updateWallet();
-    }
-    catch (error) { }
-  }
-
-  let changeAdmin = async (e) => {
-    //evita que avance a la página del formulario
-    e.preventDefault();
-
-    const inputValue = e.target.elements[0].value;
-    if (utils.isAddress(inputValue)) {
-      await myContract.current.setAdmin(inputValue).then(
-        (result) => { alert("Admin updated") },
-        (error) => { alert(decodeError(error).error) }
-      );
-    }
-    else {
-      alert("Address not valid")
-    }
+  const updateAmount = (e) => {
+    const value = parseFloat(e.target.value);
+    setAmount(value);
   };
 
-  let clickTransferTicket = async (e) => {
-    e.preventDefault();
+  let getBlockchain = async () => {
+    let provider = await detectEthereumProvider();
+    if (provider) {
+      await provider.request({ method: 'eth_requestAccounts' });
+      const networkId = await provider.request({ method: 'net_version' })
 
-    const inputTicket = e.target.elements[0].value;
-    const inputAddress = e.target.elements[1].value;
+      provider = new ethers.providers.Web3Provider(provider);
+      const signer = provider.getSigner();
 
-    if (utils.isAddress(inputAddress)) {
-      const tx = await myContract.current.transferTicket(inputTicket, inputAddress).then(
-        async (result) => { alert("Ticket transferred");
-        const tiketsUpdated = await myContract.current.getTikets();
-        setTikets(tiketsUpdated);
-      },
-        (error) => { alert(decodeError(error).error) }
+      bank.current = new Contract(
+        bankManifest.networks[networkId].address,
+        bankManifest.abi,
+        signer
       );
+
     }
-    else {
-      alert("Address not valid")
-    }
+    return null;
   }
 
+  let onSubmitDeposit = async (e) => {
+    e.preventDefault();
+
+    const BNBamount = parseFloat(e.target.elements[0].value);
+
+    // Wei to BNB se pasa con ethers.utils recibe un String!!!
+    const tx = await bank.current.deposit({
+      value: ethers.utils.parseEther(String(BNBamount)),
+      gasLimit: 6721975,
+      gasPrice: 20000000000,
+    });
+
+    await tx.wait();
+
+    updateBank();
+  }
+
+  let onSubmitDoubleInterestDeposit = async (e) => {
+    e.preventDefault();
+
+    const BNBamount = parseFloat(e.target.elements[0].value);
+
+    // Wei to BNB se pasa con ethers.utils recibe un String!!!
+    const tx = await bank.current.depositDoubleInteresr({
+      value: ethers.utils.parseEther(String(BNBamount)),
+      gasLimit: 6721975,
+      gasPrice: 20000000000,
+    });
+
+    await tx.wait();
+
+    updateBank();
+  }
+
+  let clickWithdraw = async () => {
+    // Wei to BNB se pasa con ethers.utils recibe un String!!!
+    const tx = await bank.current.withdraw({
+      value: ethers.utils.parseEther("0.05"),
+      gasLimit: 6721975,
+      gasPrice: 20000000000,
+    });
+
+    await tx.wait();
+
+    updateBank();
+  }
+
+  let clickWithdrawDoubleInterest = async () => {
+    // Wei to BNB se pasa con ethers.utils recibe un String!!!
+    const tx = await bank.current.withdrawDoubleInterest({
+      value: ethers.utils.parseEther("0.05"),
+      gasLimit: 6721975,
+      gasPrice: 20000000000,
+    });
+
+    try {
+      await tx.wait()
+      updateBank();
+    } catch (error) {
+      alert('You must wait at least 10 minutes before withdraw');
+    }
+
+    updateBank();
+  }
+
+  const clickBuyBMIW = (e) => {
+    e.preventDefault();
+  };
 
   return (
     <div>
-      <h1>Tikets store</h1>
-      <p>
-        Balance: {balance} BNB<br></br>
-        Balance Wei: {balanceWei} BNB
-        <button style={{ marginLeft: '10px' }} onClick={() => withdrawBalance()}>Withdraw Balance</button>
-      </p>
-      <form className="form-inline" onSubmit={(e) => changeAdmin(e)}>
-        <label>New Admin: </label>
-        <input style={{ marginLeft: '10px' }} type="text" />
-        <button type="submit" > Change </button>
+      <h1>Bank</h1>
+      <h3>Regular deposit</h3>
+      <form onSubmit={(e) => onSubmitDeposit(e)} >
+        <input type="number" step="0.01" />
+        <button type="submit">Deposit</button>
       </form>
       <br></br>
-      <p>
-        Wallet Balance: {walletBalance} BNB<br></br>
-      </p>
-      <ul>
-        {tikets.map((address, i) =>
-          <li key={i} style={{ display: 'flex' }}>
-            <span>
-              Tiket {i} comprado por {address}
-            </span>
-            {address === ethers.constants.AddressZero && (
-              <form className="form-inline" onSubmit={(e) => clickBuyTiket(e, i)}>
-                <input
-                  type="number"
-                  defaultValue={0.01}
-                  min={0.01}
-                  step={0.01}
-                  style={{ width: '50px', marginLeft: '10px' }}
-                />
-                <label> BNB</label>
-                <button type="submit" style={{ marginLeft: '10px' }}> Buy </button>
-              </form>
-            )}
-          </li>
-        )}
-      </ul>
+      <p>Balance: {balance} BNB</p>
+      <p>Interest: {interest} BMIW</p>
+      <button onClick={() => clickWithdraw()} > Withdraw (0.05 BNB)</button>
+      <br></br><br></br>
+
+      <h3>Double interest deposit</h3>
+      <form onSubmit={(e) => onSubmitDoubleInterestDeposit(e)} >
+        <input type="number" step="0.01" />
+        <button type="submit">Deposit</button>
+      </form>
       <br></br>
-      <form className="form-inline" onSubmit={(e) => clickTransferTicket(e)}>
-        <label>Transfer ticket number: </label>
+      <p>Balance: {doubleInterestBalance} BNB</p>
+      <p>Interest: {doubleInterest} BMIW</p>
+      <button onClick={() => clickWithdrawDoubleInterest()} > Withdraw (0.05 BNB)</button>
+      <br></br><br></br>
+
+      <h3>Buy BMIW</h3>
+      <form onSubmit={(e) => clickBuyBMIW(e)}>
         <input
           type="number"
-          defaultValue={0}
-          min={0}
-          step={1}
-          max={15}
-          style={{ width: '40px', marginLeft: '10px', marginRight: '10px' }}
+          step="1"
+          min={1}
+          value={amount}
+          onChange={(e) => updateAmount(e)}
         />
-        <label> To address: </label>
-        <input style={{ marginLeft: '10px' }} type="text" />
-        <button type="submit" > Transfer </button>
+        <button type="submit">Buy for {amount * 0.001} BNB</button>
       </form>
     </div>
   )
 }
 
-
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  <App />
 );
