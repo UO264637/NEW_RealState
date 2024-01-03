@@ -2,19 +2,16 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import detectEthereumProvider from "@metamask/detect-provider";
-import { Contract, ethers } from "ethers";
+import { Contract, ethers, utils } from "ethers";
 import { useState, useEffect, useRef } from 'react';
-import bankManifest from "./contracts/Bank.json";
+import realStateContractManifest from "./contracts/RealStateContract.json";
+import realStateContractCitiesManifest from "./contracts/RealStateContractCities.json";
+import { decodeError } from 'ethers-decode-error';
 
 function App() {
-  const bank = useRef(null);
-  const [balance, setBalance] = useState();
-  const [interest, setInterest] = useState();
-  const [doubleInterestBalance, setDoubleInterestBalance] = useState();
-  const [doubleInterest, setDoubleInterest] = useState();
-  const [amount, setAmount] = useState(1);
-  const [contractBalance, setContractBalance] = useState();
-  const [bnbFromSales, setBNBFromSales] = useState();
+  const realStateCities = useRef(null);
+  const realState = useRef(null);
+  const [realStateArray, setRealStateArray] = useState([])
 
   useEffect(() => {
     initContracts();
@@ -22,64 +19,7 @@ function App() {
 
   let initContracts = async () => {
     await getBlockchain();
-
-    updateBank();
   }
-
-  let updateBank = async () => {
-    let balanceFromBlockchain = await bank.current?.getClientBalanceBNB();
-    if (balanceFromBlockchain != null) {
-      let b = ethers.utils.formatEther(balanceFromBlockchain);
-      setBalance(b)
-    }
-    else
-      setBalance(0)
-
-    let interestFromBlockchain = await bank.current?.getClientBalanceBMIW();
-    if (interestFromBlockchain != null) {
-      let b = ethers.utils.formatEther(interestFromBlockchain);
-      setInterest(b)
-    }
-    else
-      setInterest(0)
-
-    let diBalanceFromBlockchain = await bank.current?.getClientBalanceBNBDoubleInterest();
-    if (diBalanceFromBlockchain != null) {
-      let b = ethers.utils.formatEther(diBalanceFromBlockchain);
-      setDoubleInterestBalance(b)
-    }
-    else
-      setDoubleInterestBalance(0)
-
-    let doubleInterestFromBlockchain = await bank.current?.getClientBalanceBMIWDoubleInterest();
-    if (doubleInterestFromBlockchain != null) {
-      let b = ethers.utils.formatEther(doubleInterestFromBlockchain);
-      setDoubleInterest(b)
-    }
-    else
-      setDoubleInterest(0)
-
-    let contractBalanceFromBlockchain = await bank.current?.getBalance();
-    if (contractBalanceFromBlockchain != null) {
-      let b = ethers.utils.formatEther(contractBalanceFromBlockchain);
-      setContractBalance(b)
-    }
-    else
-      setContractBalance(0)
-
-    let bnbFromSalesFromBlockchain = await bank.current?.getBNBFromSales();
-    if (bnbFromSalesFromBlockchain != null) {
-      let b = ethers.utils.formatEther(bnbFromSalesFromBlockchain);
-      setBNBFromSales(b)
-    }
-    else
-      setBNBFromSales(0)
-  }
-
-  const updateAmount = (e) => {
-    const value = parseFloat(e.target.value);
-    setAmount(value);
-  };
 
   let getBlockchain = async () => {
     let provider = await detectEthereumProvider();
@@ -90,9 +30,15 @@ function App() {
       provider = new ethers.providers.Web3Provider(provider);
       const signer = provider.getSigner();
 
-      bank.current = new Contract(
-        bankManifest.networks[networkId].address,
-        bankManifest.abi,
+      realState.current = new Contract(
+        realStateContractManifest.networks[networkId].address,
+        realStateContractManifest.abi,
+        signer
+      );
+
+      realStateCities.current = new Contract(
+        realStateContractCitiesManifest.networks[networkId].address,
+        realStateContractCitiesManifest.abi,
         signer
       );
 
@@ -100,133 +46,89 @@ function App() {
     return null;
   }
 
-  let onSubmitDeposit = async (e) => {
+  let onSubmitAddRealState = async (e) => {
     e.preventDefault();
 
-    const BNBamount = parseFloat(e.target.elements[0].value);
-
-    // Wei to BNB se pasa con ethers.utils recibe un String!!!
-    const tx = await bank.current.deposit({
-      value: ethers.utils.parseEther(String(BNBamount)),
-      gasLimit: 6721975,
-      gasPrice: 20000000000,
-    });
-
-    await tx.wait();
-
-    updateBank();
+    const tx = await realStateCities.current.addRealState({
+      city: e.target.elements[0].value,
+      street: e.target.elements[1].value,
+      number: parseInt(e.target.elements[2].value),
+      meters: parseInt(e.target.elements[3].value),
+      registration: parseInt(e.target.elements[4].value),
+      owner: e.target.elements[5].value,
+      price: e.target.elements[6].value
+    }).then(
+      (result) => { alert("Adding Real State...")},
+      (error) => { alert("You do not have permissions to add a real state") }
+    );
   }
 
-  let onSubmitDoubleInterestDeposit = async (e) => {
+  let onSubmitSearchRealState = async (e) => {
     e.preventDefault();
 
-    const BNBamount = parseFloat(e.target.elements[0].value);
+    let city = e.target.elements[0].value;
 
-    // Wei to BNB se pasa con ethers.utils recibe un String!!!
-    const tx = await bank.current.depositDoubleInteresr({
-      value: ethers.utils.parseEther(String(BNBamount)),
-      gasLimit: 6721975,
-      gasPrice: 20000000000,
-    });
+    let newProperties = await realStateCities.current.getRealStateByCity(city);
+    setRealStateArray(newProperties)
+  }
 
+  let clickOnDeleteRealState = async (city, registration) => {
+    const tx = await realStateCities.current.deleteRealStateByRegistration(city, registration);
     await tx.wait();
-
-    updateBank();
+    setRealStateArray([])
   }
 
-  let clickWithdraw = async () => {
-    // Wei to BNB se pasa con ethers.utils recibe un String!!!
-    const tx = await bank.current.withdraw({
-      value: ethers.utils.parseEther("0.05"),
-      gasLimit: 6721975,
-      gasPrice: 20000000000,
-    });
-
-    try {
-      await tx.wait()
-      updateBank();
-    } catch (error) {
-      alert('Error, no previous deposit');
-    }
-
-    updateBank();
-
-    updateBank();
-  }
-
-  let clickWithdrawDoubleInterest = async () => {
-    // Wei to BNB se pasa con ethers.utils recibe un String!!!
-    const tx = await bank.current.withdrawDoubleInterest({
-      value: ethers.utils.parseEther("0.05"),
-      gasLimit: 6721975,
-      gasPrice: 20000000000,
-    });
-
-    try {
-      await tx.wait()
-      updateBank();
-    } catch (error) {
-      alert('You must wait at least 10 minutes before withdraw');
-    }
-
-    updateBank();
-  }
-
-  const clickBuyBMIW = async (e) => {
+  let onSubmitAuthorizeAddres = async (e) => {
     e.preventDefault();
 
     const inputValue = e.target.elements[0].value;
-
-    const tx = await bank.current.buyBMIW(inputValue, {
-      value: ethers.utils.parseEther((inputValue*0.001).toString()),
-      gasLimit: 6721975,
-      gasPrice: 20000000000,
-    });
-
-    await tx.wait();
-
-    updateBank();
+    if (utils.isAddress(inputValue)) {
+      await realStateCities.current.authorizeAddress(inputValue).then(
+        (result) => { alert("Authorizing Address...") },
+        (error) => { alert("Only the admin can authorize addresses") }
+      );
+    }
+    else {
+      alert("Address not valid")
+    }
   };
 
   return (
     <div>
-      <h1>Bank</h1>
-      <h3>Regular deposit</h3>
-      <form onSubmit={(e) => onSubmitDeposit(e)} >
-        <input type="number" step="0.01" />
-        <button type="submit">Deposit</button>
+      <h1>RealState</h1>
+      <form className="form-inline" onSubmit={(e) => onSubmitAuthorizeAddres(e)}>
+        <label>Authorize Address: </label>
+        <input style={{ marginLeft: '10px' }} type="text" />
+        <button type="submit" > Authorize </button>
       </form>
-      <br></br>
-      <p>Balance: {balance} BNB</p>
-      <p>Interest: {interest} BMIW</p>
-      <button onClick={() => clickWithdraw()} > Withdraw (0.05 BNB)</button>
-      <br></br><br></br>
-
-      <h3>Double interest deposit</h3>
-      <form onSubmit={(e) => onSubmitDoubleInterestDeposit(e)} >
-        <input type="number" step="0.01" />
-        <button type="submit">Deposit</button>
+      <h2>Add RealState</h2>
+      <form onSubmit={(e) => onSubmitAddRealState(e)} >
+        <input type="text" placeholder="city" />
+        <input type="text" placeholder="street" />
+        <input type="number" placeholder="number" />
+        <input type="number" placeholder="meters" />
+        <input type="number" placeholder="registration" />
+        <input type="text" placeholder="owner name" />
+        <input type="price" placeholder="price" />
+        <button type="submit">Add</button>
       </form>
-      <br></br>
-      <p>Balance: {doubleInterestBalance} BNB</p>
-      <p>Interest: {doubleInterest} BMIW</p>
-      <button onClick={() => clickWithdrawDoubleInterest()} > Withdraw (0.05 BNB)</button>
-      <br></br><br></br>
-
-      <h3>Buy BMIW</h3>
-      <form onSubmit={(e) => clickBuyBMIW(e)}>
-        <input
-          type="number"
-          step="1"
-          min={1}
-          value={amount}
-          onChange={(e) => updateAmount(e)}
-        />
-        <button type="submit">Buy for {amount * 0.001} BNB</button>
+      <h2>Search RealState</h2>
+      <form onSubmit={(e) => onSubmitSearchRealState(e)} >
+        <input type="text" placeholder="city" />
+        <button type="submit">Search</button>
       </form>
-      <br></br><br></br>
-      <p>Contrct Balance: {contractBalance} BNB</p>
-      <p>BNB from Sales: {bnbFromSales} BNB</p>
+      {realStateArray.map((r) =>
+      (<p>
+        <button onClick={() => { clickOnDeleteRealState(r.city, r.registration) }}>Delete</button>
+        {r.city} -
+        {r.street} -
+        {ethers.BigNumber.from(r.number).toNumber()} -
+        {ethers.BigNumber.from(r.meters).toNumber()} -
+        {ethers.BigNumber.from(r.registration).toNumber()} -
+        {r.owner}
+        {r.price == 0 ? '' : '-' +  r.price + '€'}
+      </p>)
+      )}
     </div>
   )
 }
